@@ -1,22 +1,18 @@
 package com.organize.service;
 
-import com.organize.dto.DashboardDTO;
-import com.organize.dto.AppointmentDTO;
-import com.organize.dto.TopCustomerDTO;
-import com.organize.dto.RecentReviewDTO;
+import com.organize.dto.*;
 import com.organize.model.Appointment;
 import com.organize.model.AppointmentStatus;
-import com.organize.model.User;
 import com.organize.repository.AppointmentRepository;
 import com.organize.repository.UserRepository;
 import com.organize.repository.ReviewRepository;
 import org.springframework.stereotype.Service;
-import com.organize.dto.RecentReviewDTO;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -34,12 +30,12 @@ public class DashboardService {
         this.reviewRepository = reviewRepository;
     }
 
+    // ✅ Dashboard geral (estabelecimento)
     public DashboardDTO getDashboardData() {
         LocalDate hoje = LocalDate.now();
         LocalDateTime inicioHoje = hoje.atStartOfDay();
         LocalDateTime fimHoje = hoje.atTime(23, 59, 59);
 
-        // 1. Faturamento do mês
         double monthlyRevenue = appointmentRepository.findByStartTimeBetween(
                 hoje.withDayOfMonth(1).atStartOfDay(),
                 hoje.withDayOfMonth(hoje.lengthOfMonth()).atTime(23, 59, 59)
@@ -47,35 +43,31 @@ public class DashboardService {
          .mapToDouble(a -> a.getService().getPriceCents() / 100.0)
          .sum();
 
-        // 2. Agendamentos de hoje
         long appointmentsToday = appointmentRepository.countByStartTimeBetween(inicioHoje, fimHoje);
-
-        // 3. Agendamentos confirmados de hoje
         long confirmedAppointmentsToday = appointmentRepository.countByStartTimeBetweenAndStatus(
                 inicioHoje, fimHoje, AppointmentStatus.CONFIRMED
         );
 
-        // 4. Próximo agendamento
-        Appointment nextAppointment = appointmentRepository.findFirstByStartTimeAfterOrderByStartTimeAsc(LocalDateTime.now())
+        Appointment nextAppointment = appointmentRepository
+                .findFirstByStartTimeAfterOrderByStartTimeAsc(LocalDateTime.now())
                 .orElse(null);
+
         String nextAppointmentTime = nextAppointment != null ? nextAppointment.getStartTime().toString() : null;
         String nextAppointmentDescription = nextAppointment != null
                 ? nextAppointment.getClient().getName() + " - " + nextAppointment.getService().getName()
                 : null;
 
-        // 5. Novos clientes no mês
         long newCustomers = userRepository.countByCreatedAtAfter(
                 hoje.withDayOfMonth(1).atStartOfDay()
         );
 
-        // 6. Próximos agendamentos
-        List<AppointmentDTO> upcomingAppointments = appointmentRepository.findByStartTimeAfter(LocalDateTime.now()).stream()
+        List<AppointmentDTO> topUpcomingAppointments = appointmentRepository.findByStartTimeAfter(LocalDateTime.now())
+                .stream()
                 .sorted(Comparator.comparing(Appointment::getStartTime))
                 .limit(5)
                 .map(AppointmentDTO::new)
                 .collect(Collectors.toList());
 
-        // 7. Principais clientes
         List<TopCustomerDTO> topCustomers = appointmentRepository.findByStartTimeBetween(
                 hoje.withDayOfMonth(1).atStartOfDay(),
                 hoje.withDayOfMonth(hoje.lengthOfMonth()).atTime(23, 59, 59)
@@ -92,7 +84,6 @@ public class DashboardService {
         ))
         .collect(Collectors.toList());
 
-        // 8. Avaliações recentes
         List<RecentReviewDTO> recentReviews = reviewRepository.findTop5ByOrderByCreatedAtDesc().stream()
                 .map(r -> new RecentReviewDTO(
                         r.getClient().getName(),
@@ -101,6 +92,7 @@ public class DashboardService {
                 ))
                 .collect(Collectors.toList());
 
+        // Retorna o DTO completo (campos do cliente ficam nulos)
         return new DashboardDTO(
                 monthlyRevenue,
                 appointmentsToday,
@@ -108,9 +100,38 @@ public class DashboardService {
                 nextAppointmentTime,
                 nextAppointmentDescription,
                 newCustomers,
-                upcomingAppointments,
+                topUpcomingAppointments,
                 topCustomers,
-                recentReviews
+                recentReviews,
+                null, // nextAppointment (cliente)
+                null, // totalAppointments (cliente)
+                null  // upcomingAppointments (cliente)
+        );
+    }
+
+    // ✅ Dashboard específico do cliente (usando o mesmo DTO)
+    public DashboardDTO getDashboardDataForClient(UUID clientId) {
+        LocalDateTime now = LocalDateTime.now();
+
+        Appointment nextAppointment = appointmentRepository
+                .findTopByClientIdAndStartTimeAfterAndStatusOrderByStartTimeAsc(clientId, now, AppointmentStatus.CONFIRMED)
+                .orElse(null);
+
+        long totalAppointments = appointmentRepository.countByClientId(clientId);
+
+        List<AppointmentDTO> upcomingAppointments = appointmentRepository
+                .findByClientIdAndStartTimeAfterOrderByStartTimeAsc(clientId, now)
+                .stream()
+                .map(AppointmentDTO::new)
+                .collect(Collectors.toList());
+
+        // Campos gerais ficam nulos
+        return new DashboardDTO(
+                null, null, null, null, null, null,
+                null, null, null,
+                nextAppointment != null ? new AppointmentDTO(nextAppointment) : null,
+                totalAppointments,
+                upcomingAppointments
         );
     }
 }

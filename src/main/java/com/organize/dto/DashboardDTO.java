@@ -3,13 +3,16 @@ package com.organize.dto;
 import java.util.List;
 
 public record DashboardDTO(
-    double monthlyRevenue,   // alterado de long para double
-    long appointmentsToday,
-    long confirmedAppointmentsToday,
+    Double monthlyRevenue,
+    Long appointmentsToday,
+    Long confirmedAppointmentsToday,
     String nextAppointmentTime,
     String nextAppointmentDescription,
-    long newCustomers,
-    List<AppointmentDTO> upcomingAppointments,
+    Long newCustomers,
+    List<AppointmentDTO> topUpcomingAppointments,
     List<TopCustomerDTO> topCustomers,
-    List<RecentReviewDTO> recentReviews
+    List<RecentReviewDTO> recentReviews,
+    AppointmentDTO nextAppointment,
+    Long totalAppointments,
+    List<AppointmentDTO> upcomingAppointments
 ) {}
